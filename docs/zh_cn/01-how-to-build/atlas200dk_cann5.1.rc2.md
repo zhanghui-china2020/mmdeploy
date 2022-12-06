@@ -12,47 +12,29 @@
 
 ### 制卡
 
-主要有两种安装 JetPack SDK 的方式：
+主要有以下制卡的方式：
 
 1. 使用 SD 卡镜像方式，直接将镜像刻录到 SD 卡上
-2. 使用 NVIDIA SDK Manager 进行安装
 
-你可以在 NVIDIA [官网](https://developer.nvidia.com/jetpack-sdk-50dp)上找到详细的安装指南。
+你可以在 华为昇腾[官网]([https://www.hiascend.com/jetpack-sdk-50dp](https://www.hiascend.com/forum/thread-0217101703106643028-1-1.html)])上找到详细的安装指南。
 
-这里我们选择 [JetPack 4.6.1](https://developer.nvidia.com/jetpack-sdk-461) 作为装配 Jetson 模组的首选。MMDeploy 已经在 JetPack 4.6 rev3 及以上版本，TensorRT 8.0.1.6 及以上版本进行了测试。更早的 JetPack 版本与 TensorRT 7.x 存在不兼容的情况。
+### 源码编译安装Python
 
-### Conda
-
-安装 [Archiconda](https://github.com/Archiconda/build-tools/releases) 而不是 Anaconda，因为后者不提供针对 Jetson 的 wheel 文件。
+这里我们使用 Python v3.9.7。
 
 ```shell
-wget https://github.com/Archiconda/build-tools/releases/download/0.2.3/Archiconda3-0.2.3-Linux-aarch64.sh
-bash Archiconda3-0.2.3-Linux-aarch64.sh -b
 
-echo -e '\n# set environment variable for conda' >> ~/.bashrc
-echo ". ~/archiconda3/etc/profile.d/conda.sh" >> ~/.bashrc
-echo 'export PATH=$PATH:~/archiconda3/bin' >> ~/.bashrc
-
-echo -e '\n# set environment variable for pip' >> ~/.bashrc
-echo 'export OPENBLAS_CORETYPE=ARMV8' >> ~/.bashrc
-
-source ~/.bashrc
-conda --version
 ```
 
-完成安装后需创建并启动一个 conda 环境。
+境。
 
 ```shell
 # 得到默认安装的 python3 版本
-export PYTHON_VERSION=`python3 --version | cut -d' ' -f 2 | cut -d'.' -f1,2`
-conda create -y -n mmdeploy python=${PYTHON_VERSION}
-conda activate mmdeploy
+
 ```
 
 ```{note}
-JetPack SDK 4+ 自带 python 3.6。我们强烈建议使用默认的 python 版本。尝试升级 python 可能会破坏 JetPack 环境。
 
-如果必须安装更高版本的 python， 可以选择安装 JetPack 5+，其提供 python 3.8。
 ```
 
 ### PyTorch
@@ -78,63 +60,31 @@ pip install -e .
 
 如果安装其他版本的 PyTorch 和 torchvision，需参考[这里](https://pypi.org/project/torchvision/)的表格以保证版本兼容性。
 
-### 源码编译安装 CMake
+### 源码编译安装 CMake 
 
-这里我们使用 CMake v3.24.3。
+这里我们使用 CMake v3.24.3，建议使用HwHiAiUser进行安装。
 
 ```shell
-# purge existing
-sudo apt-get purge cmake
-sudo snap remove cmake
+wget https://github.com/Kitware/CMake/releases/download/v3.24.3/cmake-3.24.3.tar.gz
+tar -xvf cmake-3.24.3.tar.gz
+cd cmake-3.24.3
+./configure
+make -j$(nproc)
+sudo make install
+```
 
-# install prebuilt binary
-export CMAKE_VER=3.23.1
-export ARCH=aarch64
-wget https://github.com/Kitware/CMake/releases/download/v${CMAKE_VER}/cmake-${CMAKE_VER}-linux-${ARCH}.sh
-chmod +x cmake-${CMAKE_VER}-linux-${ARCH}.sh
-sudo ./cmake-${CMAKE_VER}-linux-${ARCH}.sh --prefix=/usr --skip-license
+在~/.bashrc中将/usr/local/bin的目录放在/usr/bin前面
+export PATH=/usr/local/bin:$PATH
+
+```shell
+source ~/.bashrc
 cmake --version
 ```
 
 ## 安装依赖项
 
-MMDeploy 中的 Model Converter 依赖于 [MMCV](https://github.com/open-mmlab/mmcv) 和 CANN。
-同时， MMDeploy 的 C/C++ Inference SDK 依赖于 [spdlog](https://github.com/gabime/spdlog)， OpenCV， [ppl.cv](https://github.com/openppl-public/ppl.cv) 和 TensorRT 等。
-因此，接下来我们将先介绍如何配置 TensorRT。
+MMDeploy 中的 Model Converter 依赖于 [MMCV](https://github.com/open-mmlab/mmcv) 和 CANN（已在dd镜像刻录时内置）。
 之后再分别展示安装 Model Converter 和 C/C++ Inference SDK 的步骤。
-
-### 配置 TensorRT
-
-JetPack SDK 自带 TensorRT。
-但是为了能够在 Conda 环境中成功导入，我们需要将 TensorRT 拷贝进先前创建的 Conda 环境中。
-
-```shell
-cp -r /usr/lib/python${PYTHON_VERSION}/dist-packages/tensorrt* ~/archiconda3/envs/mmdeploy/lib/python${PYTHON_VERSION}/site-packages/
-conda deactivate
-conda activate mmdeploy
-python -c "import tensorrt; print(tensorrt.__version__)" # 将会打印出 TensorRT 版本
-
-# 为之后编译 MMDeploy 设置环境变量
-export TENSORRT_DIR=/usr/include/aarch64-linux-gnu
-
-# 将 cuda 路径和 lib 路径写入到环境变量 `$PATH` 和 `$LD_LIBRARY_PATH` 中， 为之后编译 MMDeploy 做准备
-export PATH=$PATH:/usr/local/cuda/bin
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
-```
-
-你也可以通过添加以上环境变量至 `~/.bashrc` 使得它们永久化。
-
-```shell
-echo -e '\n# set environment variable for TensorRT' >> ~/.bashrc
-echo 'export TENSORRT_DIR=/usr/include/aarch64-linux-gnu' >> ~/.bashrc
-
-echo -e '\n# set environment variable for CUDA' >> ~/.bashrc
-echo 'export PATH=$PATH:/usr/local/cuda/bin' >> ~/.bashrc
-echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64' >> ~/.bashrc
-
-source ~/.bashrc
-conda activate mmdeploy
-```
 
 ### 安装 Model Converter 的依赖项
 
